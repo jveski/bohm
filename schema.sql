@@ -12,6 +12,7 @@ CREATE INDEX IF NOT EXISTS idx_bohm_concurrent_req ON bohm_queue_{{ .Name }} (co
 CREATE INDEX IF NOT EXISTS idx_bohm_queue_id ON bohm_queue_{{ .Name }} (id);
 CREATE INDEX IF NOT EXISTS idx_bohm_pop_count ON bohm_queue_{{ .Name }} (pop_count);
 
+{{- if .Table }}
 CREATE OR REPLACE FUNCTION bohm_enqueue_from_{{ .Table }}_to_{{ .Name }}() RETURNS trigger AS $bohm_enqueue$
  BEGIN
 	IF EXISTS (SELECT FROM bohm_queue_{{ .Name }} WHERE row_id = NEW.{{ .PKeyColumn }}) THEN
@@ -34,6 +35,9 @@ FOR EACH ROW WHEN ({{ .RenderFilters }}) EXECUTE FUNCTION bohm_enqueue_from_{{ .
 CREATE OR REPLACE TRIGGER bohm_enqueue_delete_{{ .Table }}_to_{{ .Name }}
 AFTER DELETE ON {{ .Table }}
 FOR EACH ROW EXECUTE FUNCTION bohm_enqueue_from_{{ .Table }}_to_{{ .Name }}();
+{{- else }}
+INSERT INTO bohm_queue_{{ .Name }} (row_id) VALUES (0) ON CONFLICT (row_id) DO NOTHING;
+{{- end }}
 
 CREATE OR REPLACE FUNCTION bohm_notify_{{ .Name }}() RETURNS trigger AS $bohm_notify$
  BEGIN

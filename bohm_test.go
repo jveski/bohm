@@ -340,6 +340,21 @@ func TestFilterChanged(t *testing.T) {
 	assert.Equal(t, int64(1), depth)
 }
 
+func TestPollingBasics(t *testing.T) {
+	db := newDB(t)
+	cluster := New(db)
+
+	calls := make(chan int64, 1)
+	err := cluster.NewPollingLoop(newContext(t), WithQueueName("test_polling_loop"), WithHandler(func(ctx context.Context, rowID int64) (Result, error) {
+		Logger(ctx).InfoContext(ctx, "handling work item")
+		calls <- rowID
+		return Result{}, nil
+	}))
+	require.NoError(t, err)
+
+	<-calls
+}
+
 func newContext(t *testing.T) context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

@@ -80,6 +80,38 @@ func (c *Cluster) NewQueue(ctx context.Context, table string, opts ...Option) er
 	return nil
 }
 
+// NewPollingLoop is similar to NewQueue, but instead of creating a queue that watches a table,
+// it creates a queue with a single row used to poll at a dynamic, configurable interval.
+// Returning an empty RequeueAfter will break the loop!
+func (c *Cluster) NewPollingLoop(ctx context.Context, opts ...Option) error {
+	w := &watchQueue{
+		cluster:       c,
+		runner:        defaultRunner,
+		Notifications: make(chan struct{}, 1),
+		LockTTL:       time.Second * 30,
+	}
+	for _, op := range opts {
+		op(w)
+	}
+	w.Notifications <- struct{}{}
+
+	if w.Name == "" {
+		return fmt.Errorf("WithQueueName is a required option")
+	}
+
+	err := w.setup(ctx)
+	if err != nil {
+		return fmt.Errorf("setting up queue: %w", err)
+	}
+
+	if w.Handler != nil {
+		go w.runner(ctx, w.runWatchLoop(ctx))
+		go w.runner(ctx, w.runDispatchLoop(ctx))
+	}
+
+	return nil
+}
+
 // WaitForHandlers blocks until all currently in-flight workers return.
 func (c *Cluster) WaitForHandlers() { c.inflight.Wait() }
 
